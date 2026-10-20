@@ -5,6 +5,8 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
+RUN pip install --no-cache-dir --upgrade pip setuptools>=79.0.0 wheel>=0.46.2
+
 # تثبيت المتطلبات في مجلد مؤقت
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
@@ -15,6 +17,9 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 FROM python:3.11-slim AS runner
 
 WORKDIR /app
+
+# ترقية الحزم الأساسية في الصورة النهائية لإزالة حزم Vendor المصابة
+RUN pip install --no-cache-dir --upgrade pip "setuptools>=79.0.0" "wheel>=0.46.2"
 
 # إنشاء مستخدم غير جذر (Non-root user) لتعزيز الأمان
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser
