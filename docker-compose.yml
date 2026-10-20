@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # --------------------------------------------------------
+  # Backend Microservice
+  # --------------------------------------------------------
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    image: secure-backend:latest
+    container_name: platform-backend
+    ports:
+      - "8080:8000"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # --------------------------------------------------------
+  # Frontend Gateway Microservice
+  # --------------------------------------------------------
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    image: secure-frontend:latest
+    container_name: platform-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # نستخدم اسم الخدمة "backend" مباشرة لأن Compose يوفر DNS داخلي للشبكة
+      - BACKEND_URL=http://backend:8000/api/v1/data
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+# --------------------------------------------------------
+# Isolated Internal Network (Zero Trust principle)
+# --------------------------------------------------------
+networks:
+  app-network:
+    driver: bridge
