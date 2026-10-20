@@ -1,0 +1,100 @@
+name: DevSecOps Microservices Security Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # --------------------------------------------------------
+  # 1. Secret Scanning (Gitleaks)
+  # --------------------------------------------------------
+  secret-scanner:
+    name: 1. Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --------------------------------------------------------
+  # 2. SAST - Static Application Security Testing (Semgrep)
+  # --------------------------------------------------------
+  sast-scanner:
+    name: 2. SAST Code Analysis
+    runs-on: ubuntu-latest
+    needs: secret-scanner
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep SAST
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/default
+
+  # --------------------------------------------------------
+  # 3. SCA - Software Composition Analysis (Trivy FS)
+  # --------------------------------------------------------
+  sca-scanner:
+    name: 3. SCA Dependency Scan
+    runs-on: ubuntu-latest
+    needs: secret-scanner
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy FS Scan for Dependencies
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+
+  # --------------------------------------------------------
+  # 4. Container Vulnerability Scanning (Trivy Image)
+  # --------------------------------------------------------
+  container-security:
+    name: 4. Container Vulnerability Scan
+    runs-on: ubuntu-latest
+    needs: [sast-scanner, sca-scanner]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Image
+        run: |
+          docker build -t secure-backend:${{ github.sha }} ./services/backend
+
+      - name: Scan Backend Image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'secure-backend:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      - name: Build Frontend Image
+        run: |
+          docker build -t secure-frontend:${{ github.sha }} ./services/frontend
+
+      - name: Scan Frontend Image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'secure-frontend:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
